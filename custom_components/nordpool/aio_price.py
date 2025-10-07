@@ -205,6 +205,10 @@ class AioPrices:
                     }
                 )
 
+        # Aggregate 15-minute intervals to hourly averages for private customers
+        if data_type == self.HOURLY:
+            area_data = self._aggregate_to_hourly(area_data)
+
         return {
             "start": start_time,
             "end": end_time,
@@ -212,6 +216,55 @@ class AioPrices:
             "currency": currency,
             "areas": area_data,
         }
+
+    def _aggregate_to_hourly(self, area_data):
+        """
+        Aggregate 15-minute interval data to hourly averages.
+        Nord Pool now provides 15-minute intervals, but private customers
+        pay the average of the 4 fifteen-minute intervals within each hour.
+
+        Groups values by hour and calculates mean of 15-min intervals.
+        Returns area_data with hourly averaged values.
+        """
+        for area_key, area_info in area_data.items():
+            values = area_info.get("values", [])
+
+            # If we have 24 or fewer values, it's already hourly data
+            if len(values) <= 24:
+                continue
+
+            # Group 15-minute intervals by hour
+            hourly_groups = {}
+            for entry in values:
+                # Round down to the hour
+                hour_key = entry["start"].replace(minute=0, second=0, microsecond=0)
+
+                if hour_key not in hourly_groups:
+                    hourly_groups[hour_key] = []
+                hourly_groups[hour_key].append(entry["value"])
+
+            # Calculate hourly averages
+            aggregated = []
+            for hour_start in sorted(hourly_groups.keys()):
+                interval_values = hourly_groups[hour_start]
+                # Calculate average of all 15-min intervals in this hour
+                avg_value = sum(interval_values) / len(interval_values)
+                hour_end = hour_start + timedelta(hours=1)
+
+                aggregated.append(
+                    {"start": hour_start, "end": hour_end, "value": avg_value}
+                )
+
+            # Replace 15-minute data with hourly aggregated data
+            area_info["values"] = aggregated
+            _LOGGER.debug(
+                "Aggregated %d 15-minute intervals to %d hourly values for area %s",
+                len(values),
+                len(aggregated),
+                area_key,
+            )
+
+        return area_data
 
     async def _fetch_json(self, data_type, end_date=None, areas=None):
         """Fetch JSON from API"""

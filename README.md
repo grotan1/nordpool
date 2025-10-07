@@ -6,6 +6,8 @@ Nord Pool is a service provider that operates an electricity market and power sy
 
 This integration provides the spot market (hourly) electricity prices for the Nordic, Baltic and part of Western Europe.
 
+**Note:** Nord Pool now provides pricing data in 15-minute intervals. This integration automatically aggregates these to hourly averages, which reflects what private customers actually pay (the average of the four 15-minute intervals within each hour). The main price attributes (`today`, `tomorrow`, `current_price`) use these hourly averages. For access to the original 15-minute data, use the `raw_today` and `raw_tomorrow` attributes.
+
 The Nordpool sensor provides the current price with today's and tomorrow's prices as attributes. Prices become available around 13:00.
 
 [ApexCharts](https://github.com/RomRider/apexcharts-card) card is recommended for visualization of the data in Home Assistant.<br>
@@ -209,11 +211,13 @@ Add 21% tax and overhead cost stored in a helper
 - ```region```: The specific region of prices
 - ```low_price```: If price is below low_price_threshold
 - ```price_percent_to_average```:
-- ```today```: List of all values
-- ```tomorrow```: list of all values
+- ```today```: List of all hourly values (averaged from 15-min intervals if applicable)
+- ```tomorrow```: List of all hourly values (averaged from 15-min intervals if applicable)
 - ```tomorrow_valid```: If tomorrow's values are in yet
-- ```raw_today```: Array of all values
-- ```raw_tomorrow```: Array of values
+- ```raw_today```: Array of all values (15-minute intervals if available, otherwise hourly)
+- ```raw_tomorrow```: Array of values (15-minute intervals if available, otherwise hourly)
+- ```raw_today_agg```: Array of hourly aggregated values (averages 15-min intervals to hourly)
+- ```raw_tomorrow_agg```: Array of hourly aggregated values (averages 15-min intervals to hourly)
 - ```current_price```: What the current price is
 - ```additional_costs_current_hour```: If there is any additional costs this hour
 - ```price_in_cents```: Boolean if prices is in cents

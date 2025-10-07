@@ -1,5 +1,6 @@
 import logging
 import math
+from datetime import timedelta
 from operator import itemgetter
 from statistics import mean, median
 
@@ -389,6 +390,8 @@ class NordpoolSensor(SensorEntity):
             "tomorrow_valid": self.tomorrow_valid,
             "raw_today": self.raw_today,
             "raw_tomorrow": self.raw_tomorrow,
+            "raw_today_agg": self.raw_today_agg,
+            "raw_tomorrow_agg": self.raw_tomorrow_agg,
             "current_price": self.current_price,
             "additional_costs_current_hour": self.additional_costs,
             "price_in_cents": self._use_cents,
@@ -406,6 +409,45 @@ class NordpoolSensor(SensorEntity):
             result.append(item)
         return result
 
+    def _aggregate_raw_to_hourly(self, data) -> list:
+        """Aggregate 15-minute intervals to hourly averages for raw data.
+
+        This provides hourly aggregated data from 15-minute intervals,
+        reflecting the average price that private customers actually pay.
+        """
+        raw_data = self._someday(data)
+
+        # If we have 24 or fewer entries, it's already hourly data
+        if not raw_data or len(raw_data) <= 24:
+            return self._add_raw(data)
+
+        # Group 15-minute intervals by hour
+        hourly_groups = {}
+        for entry in raw_data:
+            # Round down to the hour
+            hour_key = entry["start"].replace(minute=0, second=0, microsecond=0)
+
+            if hour_key not in hourly_groups:
+                hourly_groups[hour_key] = []
+            hourly_groups[hour_key].append(entry["value"])
+
+        # Calculate hourly averages with price calculation
+        result = []
+        for hour_start in sorted(hourly_groups.keys()):
+            values = hourly_groups[hour_start]
+            # Calculate average of all 15-min interval raw values
+            avg_raw_value = sum(values) / len(values)
+            hour_end = hour_start + timedelta(hours=1)
+
+            item = {
+                "start": hour_start,
+                "end": hour_end,
+                "value": self._calc_price(avg_raw_value, fake_dt=hour_start),
+            }
+            result.append(item)
+
+        return result
+
     @property
     def raw_today(self) -> list:
         """Raw today"""
@@ -415,6 +457,24 @@ class NordpoolSensor(SensorEntity):
     def raw_tomorrow(self) -> list:
         """Raw tomorrow"""
         return self._add_raw(self._data_tomorrow)
+
+    @property
+    def raw_today_agg(self) -> list:
+        """Hourly aggregated raw data for today.
+
+        When Nord Pool provides 15-minute intervals, this aggregates them
+        to hourly averages, which is what private customers actually pay.
+        """
+        return self._aggregate_raw_to_hourly(self._data_today)
+
+    @property
+    def raw_tomorrow_agg(self) -> list:
+        """Hourly aggregated raw data for tomorrow.
+
+        When Nord Pool provides 15-minute intervals, this aggregates them
+        to hourly averages, which is what private customers actually pay.
+        """
+        return self._aggregate_raw_to_hourly(self._data_tomorrow)
 
     @property
     def tomorrow_valid(self) -> bool:
